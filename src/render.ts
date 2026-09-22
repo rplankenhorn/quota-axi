@@ -438,6 +438,12 @@ function auditBlocks(response: QuotaAxiResponse): string[] {
       ...providerColumns(provider),
       id: window.id,
       label: window.label,
+      // Dollar figures are the only report of a spend window's actual budget:
+      // `percentRemaining` alone cannot recover them. Kept in the normalized
+      // USD units the JSON payload publishes, and `unknown` for every window
+      // that meters requests rather than money.
+      spentUsd: window.spentUsd ?? UNKNOWN,
+      limitUsd: window.limitUsd ?? UNKNOWN,
       percentRemaining: window.percentRemaining ?? UNKNOWN,
       resetsAt: window.resetsAt ?? window.resetText ?? UNKNOWN,
       pace: window.pace?.status ?? UNKNOWN,
