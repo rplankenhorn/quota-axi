@@ -1095,18 +1095,80 @@ describe("CLI quota rendering", () => {
 
     const full = await capture(["--provider", "claude,codex", "--full"]);
     expect(full).toContain(
-      "windows[2]{provider,id,label,percentRemaining,resetsAt,pace,reserve,burnMultiple,timeRemainingPercent,elapsedPercent,cycleSeconds,projectedExhaustedAt,confidence}:",
+      "windows[2]{provider,id,label,spentUsd,limitUsd,percentRemaining,resetsAt,pace,reserve,burnMultiple,timeRemainingPercent,elapsedPercent,cycleSeconds,projectedExhaustedAt,confidence}:",
     );
     expect(full).toContain("scopeAudit[2]{");
     expect(full).toContain("worstReserve");
     expect(full).toMatch(
-      /claude,five_hour,session,1,[^\n]*,on_pace,-1,1\.0102,2,98,18000,/,
+      /claude,five_hour,session,unknown,unknown,1,[^\n]*,on_pace,-1,1\.0102,2,98,18000,/,
     );
 
     const json = JSON.parse(
       await capture(["--provider", "claude,codex", "--json"]),
     ) as QuotaAxiResponse;
     expect(json.providers[0]?.windows[0]?.pace?.reservePercentPoints).toBe(-1);
+  });
+
+  it("preserves window dollar figures in the full TOON audit block", async () => {
+    useTempCache();
+    // A spend-metered Claude window alongside a request-metered one: the audit
+    // block has to carry the dollar figures for the first without inventing
+    // them for the second.
+    PROVIDERS.claude = providerWithQuota({
+      provider: "claude",
+      label: "Claude",
+      plan: "enterprise",
+      source: "keychain",
+      windows: [
+        {
+          id: "extra_usage",
+          label: "extra usage",
+          kind: "credits",
+          percentUsed: 82,
+          percentRemaining: 18,
+          spentUsd: 3088.72,
+          limitUsd: 3750,
+        },
+        {
+          id: "five_hour",
+          label: "session",
+          kind: "session",
+          percentUsed: 40,
+          percentRemaining: 60,
+        },
+      ],
+      state: { status: "fresh", stale: false, sourcesTried: ["keychain"] },
+    });
+
+    const full = await capture(["--provider", "claude", "--full"]);
+    expect(full).toContain(
+      "windows[2]{provider,id,label,spentUsd,limitUsd,percentRemaining,resetsAt,pace,reserve,burnMultiple,timeRemainingPercent,elapsedPercent,cycleSeconds,projectedExhaustedAt,confidence}:",
+    );
+    // Normalized USD units, exactly as the JSON payload publishes them.
+    expect(full).toContain(
+      "claude,extra_usage,extra usage,3088.72,3750,18,unknown,unknown,unknown,unknown,unknown,unknown,unknown,unknown,unknown",
+    );
+    // A window that meters requests stays representable without invented money.
+    expect(full).toContain(
+      "claude,five_hour,session,unknown,unknown,60,unknown,unknown,unknown,unknown,unknown,unknown,unknown,unknown,unknown",
+    );
+
+    // Default TOON is unchanged: the audit block is a `--full` surface only.
+    const compact = await capture(["--provider", "claude"]);
+    expect(compact).not.toContain("windows[");
+    expect(compact).not.toContain("spentUsd");
+
+    // The JSON schema keeps the fields where it already published them.
+    const json = JSON.parse(
+      await capture(["--provider", "claude", "--json"]),
+    ) as QuotaAxiResponse;
+    const extraUsage = json.providers[0]?.windows[0];
+    expect(extraUsage?.spentUsd).toBe(3088.72);
+    expect(extraUsage?.limitUsd).toBe(3750);
+    expect(extraUsage?.percentRemaining).toBe(18);
+    const session = json.providers[0]?.windows[1];
+    expect(session?.spentUsd).toBeUndefined();
+    expect(session?.limitUsd).toBeUndefined();
   });
 
   it("renders Kimi remaining quota in compact TOON and normalized JSON", async () => {
@@ -1126,10 +1188,10 @@ describe("CLI quota rendering", () => {
     const fullToon = await capture(["--provider", "kimi", "--full"]);
     expect(fullToon).toContain("kimi,unknown,api,fresh");
     expect(fullToon).toMatch(
-      /kimi,five_hour,session,81\.25,"2027-02-03T09:05:06\.000Z",/,
+      /kimi,five_hour,session,unknown,unknown,81\.25,"2027-02-03T09:05:06\.000Z",/,
     );
     expect(fullToon).toMatch(
-      /kimi,weekly,week,67\.5,"2027-02-08T04:05:06\.000Z",/,
+      /kimi,weekly,week,unknown,unknown,67\.5,"2027-02-08T04:05:06\.000Z",/,
     );
 
     const json = JSON.parse(

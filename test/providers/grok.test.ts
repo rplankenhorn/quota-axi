@@ -2926,8 +2926,10 @@ describe("Grok CLI rendering regression", () => {
     });
 
     const toon = await captureCli(["--provider", "grok", "--full"]);
-    expect(toon).toContain("grok,credits,week,100");
-    expect(toon).not.toContain("grok,credits,week,unknown");
+    // The dollar columns precede `percentRemaining` and are `unknown` for this
+    // request-metered window; the proto3 zero still has to render numerically.
+    expect(toon).toContain("grok,credits,week,unknown,unknown,100");
+    expect(toon).not.toContain("grok,credits,week,unknown,unknown,unknown");
     expect(await captureCli(["--provider", "grok"])).toContain(
       "grok,all_products,100",
     );

@@ -90,7 +90,7 @@ process.stdin.on("data", (chunk) => {
 
     // Window identity lives in the `--full` audit tier.
     const toon = run("--full");
-    expect(toon).toContain("codex,weekly,week,100");
+    expect(toon).toContain("codex,weekly,week,unknown,unknown,100");
     expect(toon).not.toContain("codex,five_hour,session");
 
     const json = JSON.parse(run("--json", "--full")) as QuotaAxiResponse;
