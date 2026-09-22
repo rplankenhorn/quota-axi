@@ -479,6 +479,8 @@ An unknown or stale scope deliberately gets **no** `quota[]` row: the absence of
 
 `--full` adds; it never subtracts. Default TOON carries the three decision blocks; `--full` TOON adds the `providers[]`, `windows[]`, `scopeAudit[]`, `accounts[]`, and `attempts[]` audit blocks. Default `--json` carries the normalized model with derivation inputs demoted; `--full` restores them with **no renames and no re-nesting** - a demoted field is simply absent until `--full`, in the exact position and under the exact name it has there.
 
+The `--full` TOON `windows[]` block carries each window's `spentUsd` and `limitUsd` ahead of `percentRemaining`, in the same USD units `--json` publishes, because a percentage alone cannot recover a spend window's actual budget. A window that meters requests rather than money renders both as `unknown`; `percentRemaining` keeps its meaning, and the default blocks and the `--json` schema are unchanged.
+
 | Demoted to `--full` in `--json`                                                                                                                |
 | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `providers[].label`, `providers[].source`                                                                                                      |
