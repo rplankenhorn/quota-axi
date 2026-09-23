@@ -91,14 +91,10 @@ export function priceHistorySample(sample: HistorySample): HistoryPrice {
     : undefined;
   if (!rate) return { reason: "model_rate_unverified" };
   const t = sample.tokens;
-  if (
-    sample.provider === "codex" &&
-    !sample.inputIncludesCache &&
-    t.cacheReadTokens > 0 &&
-    t.cacheReadTokens <= t.inputTokens
-  ) {
-    return { reason: "pi_codex_input_units_unverified" };
-  }
+  // Pi's openai-codex adapter subtracts cache reads AND writes before storing
+  // usage.input. This is a verified producer contract, not a relation between
+  // observed counter values; see test/fixtures/history/README.md for the pinned
+  // publisher source and offline normalizer evidence. Native Codex is inclusive.
   const input =
     t.inputTokens - (sample.inputIncludesCache ? t.cacheReadTokens : 0);
   const prompt = input + t.cacheReadTokens + t.cacheWriteTokens;

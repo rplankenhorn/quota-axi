@@ -78,8 +78,8 @@ describe("verified API token-rate equivalents", () => {
     expect(priceHistorySample(value)).toEqual({ usd: 0.028805 });
   });
 
-  it("prices Pi Codex when the exclusive shape is proven, and withholds cost when it is not", () => {
-    const proven = sample("codex", {
+  it("prices verified Pi Codex units independently of the input/cache value relationship", () => {
+    const value = sample("codex", {
       source: "pi",
       inputIncludesCache: false,
       tokens: {
@@ -89,17 +89,23 @@ describe("verified API token-rate equivalents", () => {
         cacheWriteTokens: 0,
       },
     });
-    expect(priceHistorySample(proven)).toEqual({ usd: 0.030275 });
+    expect(priceHistorySample(value)).toEqual({ usd: 0.030275 });
     expect(
       priceHistorySample({
-        ...proven,
-        tokens: { ...proven.tokens, cacheReadTokens: 600 },
+        ...value,
+        tokens: { ...value.tokens, cacheReadTokens: 600 },
       }),
-    ).toEqual({ reason: "pi_codex_input_units_unverified" });
+    ).toEqual({ usd: 0.029855 });
     expect(
       priceHistorySample({
-        ...proven,
-        tokens: { ...proven.tokens, cacheReadTokens: 0 },
+        ...value,
+        tokens: { ...value.tokens, cacheReadTokens: 1000 },
+      }),
+    ).toEqual({ usd: 0.029925 });
+    expect(
+      priceHistorySample({
+        ...value,
+        tokens: { ...value.tokens, cacheReadTokens: 0 },
       }),
     ).toEqual({ usd: 0.02975 });
   });
@@ -298,7 +304,7 @@ describe("monthly budget velocity", () => {
     expect(result.forecast[1].projectedMonthUsd).toBeUndefined();
   });
 
-  it("preserves tokens but withholds cost and projection for unverifiable Pi Codex units", () => {
+  it("preserves verified Pi Codex tokens and forecasts even when cache reads are below input", () => {
     const result = report([
       sample("codex", {
         source: "pi",
@@ -312,19 +318,18 @@ describe("monthly budget velocity", () => {
       }),
     ]);
     expect(result.daily[0]).toMatchObject({
-      unpricedRecords: 1,
-      unpricedReasons: ["pi_codex_input_units_unverified"],
+      unpricedRecords: 0,
+      unpricedReasons: [],
       tokens: { inputTokens: 1000, cacheReadTokens: 600 },
+      apiEquivalentUsd: 0.029855,
     });
-    expect(result.daily[0].apiEquivalentUsd).toBeUndefined();
     expect(result.forecast[1]).toMatchObject({
-      status: "unknown",
-      reason: "unpriced_usage",
+      status: "within_budget_at_observed_pace",
+      apiEquivalentUsd: 0.029855,
+      projectedMonthUsd: 0.05971,
+      projectedOverageUsd: 0,
     });
-    expect(result.forecast[1].apiEquivalentUsd).toBeUndefined();
-    expect(result.forecast[1].projectedMonthUsd).toBeUndefined();
-    expect(result.forecast[1].dailyVelocityUsd).toBeUndefined();
-    expect(result.forecast[1].projectedOverageUsd).toBeUndefined();
+    expect(result.forecast[1].reason).toBeUndefined();
   });
 
   it("discloses partial reads, while a known subtotal can still prove the budget was exceeded", () => {

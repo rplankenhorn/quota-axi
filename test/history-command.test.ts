@@ -17,6 +17,14 @@ import { PROVIDERS } from "../src/providers/index.js";
 let root: string;
 const NOW = "2026-09-16T00:00:00.000Z";
 const TIME = "2026-09-10T12:00:00.000Z";
+// Recorded output of the actual, publisher-verified Pi normalizer; no live stores
+// or installed Pi dependency is used by CI. Provenance accompanies the fixture.
+const piUsageEvidence = JSON.parse(
+  readFileSync(
+    new URL("./fixtures/history/pi-codex-usage.json", import.meta.url),
+    "utf8",
+  ),
+);
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "quota-history-test-"));
@@ -143,6 +151,101 @@ async function json(args: string[] = []): Promise<HistoryReport> {
 }
 
 describe("history CLI using synthetic local stores", () => {
+  it.each([
+    [0, 0.035],
+    [1, 0.033425],
+    [2, 0.03185],
+    [3, 0.030275],
+  ])(
+    "prices publisher-normalized Pi case %i identically to its native Codex counters",
+    async (index, expectedUsd) => {
+      const { openaiUsage, piMessage } = piUsageEvidence.cases[index];
+      write("pi/sessions/evidence.jsonl", [
+        {
+          type: "message",
+          id: `case-${index}`,
+          timestamp: TIME,
+          message: piMessage,
+        },
+      ]);
+      const native = {
+        input_tokens: openaiUsage.input_tokens,
+        cached_input_tokens: openaiUsage.input_tokens_details.cached_tokens,
+        output_tokens: openaiUsage.output_tokens,
+        reasoning_output_tokens:
+          openaiUsage.output_tokens_details.reasoning_tokens,
+        total_tokens: openaiUsage.total_tokens,
+      };
+      write("codex/sessions/evidence.jsonl", [
+        meta,
+        context(piMessage.model),
+        {
+          type: "event_msg",
+          timestamp: TIME,
+          payload: {
+            type: "token_count",
+            info: { total_token_usage: native, last_token_usage: native },
+          },
+        },
+      ]);
+      const result = await json(["--provider", "codex"]);
+      expect(result.issues).toEqual([]);
+      expect(result.daily).toHaveLength(2);
+      expect(result.daily[0]).toMatchObject({
+        source: "codex-cli",
+        inputIncludesCache: true,
+        apiEquivalentUsd: expectedUsd,
+        tokens: { inputTokens: 4000 },
+      });
+      expect(result.daily[1]).toMatchObject({
+        source: "pi",
+        inputIncludesCache: false,
+        apiEquivalentUsd: expectedUsd,
+        tokens: {
+          inputTokens: piMessage.usage.input,
+          cacheReadTokens: piMessage.usage.cacheRead,
+          outputTokens: 2000,
+          reasoningOutputTokens: 1500,
+        },
+      });
+      expect(result.forecast[0].apiEquivalentUsd).toBeCloseTo(
+        expectedUsd * 2,
+        6,
+      );
+      expect(result.forecast[0].projectedMonthUsd).toBeCloseTo(
+        expectedUsd * 4,
+        6,
+      );
+      expect(result.forecast[0].reason).toBeUndefined();
+    },
+  );
+
+  it("keeps the publisher's Pi cache-write counters separate from both fresh and cached input", async () => {
+    const { piMessage } = piUsageEvidence.cases[4];
+    write("pi/sessions/evidence.jsonl", [
+      {
+        type: "message",
+        id: "write-case",
+        timestamp: TIME,
+        message: piMessage,
+      },
+    ]);
+    const result = await json(["--provider", "codex"]);
+    expect(result.daily[0]).toMatchObject({
+      source: "pi",
+      inputIncludesCache: false,
+      apiEquivalentUsd: 0.13225,
+      tokens: {
+        inputTokens: 2500,
+        cacheReadTokens: 1000,
+        cacheWriteTokens: 500,
+        outputTokens: 2000,
+      },
+    });
+    expect(result.forecast[0].projectedMonthUsd).toBe(0.2645);
+    expect(result.issues).toEqual([]);
+  });
+
   it("reports daily Claude/Codex/Pi usage and forecasts without quota I/O, caching, or transcript leakage", async () => {
     const claudeProbe = vi.spyOn(PROVIDERS.claude, "fetchQuota");
     const codexProbe = vi.spyOn(PROVIDERS.codex, "fetchQuota");

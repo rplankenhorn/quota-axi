@@ -1,0 +1,209 @@
+{
+  "provenance": {
+    "package": "@earendil-works/pi-ai",
+    "version": "0.87.1",
+    "gitHead": "f07218c4d4bbc12bef056a7058c3dd49dfe41abe",
+    "tarball": "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-0.87.1.tgz",
+    "integrity": "sha512-X/3PfQBnnoeVdO9Cv8zHghUMglzlgNZYGNzoPnbRoGnHl3Rw3TlA2UKSUB7BRHUOxMryHXYa8dnjWZlbRheDZA==",
+    "module": "dist/api/openai-responses-shared.js",
+    "function": "processResponsesStream",
+    "verification": "Published package bytes matched the installed adapter. Synthetic response.completed events were passed to the publisher function offline. Cost rates were set to zero: only token normalization is evidence here."
+  },
+  "cases": [
+    {
+      "openaiUsage": {
+        "input_tokens": 4000,
+        "input_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0
+        },
+        "output_tokens": 2000,
+        "output_tokens_details": {
+          "reasoning_tokens": 1500
+        },
+        "total_tokens": 6000
+      },
+      "piMessage": {
+        "role": "assistant",
+        "provider": "openai-codex",
+        "api": "openai-codex-responses",
+        "model": "gpt-5.3-codex",
+        "content": [],
+        "responseId": "synthetic-0",
+        "usage": {
+          "input": 4000,
+          "output": 2000,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "reasoning": 1500,
+          "totalTokens": 6000,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "rawStopReason": "completed",
+        "stopReason": "stop"
+      }
+    },
+    {
+      "openaiUsage": {
+        "input_tokens": 4000,
+        "input_tokens_details": {
+          "cached_tokens": 1000,
+          "cache_write_tokens": 0
+        },
+        "output_tokens": 2000,
+        "output_tokens_details": {
+          "reasoning_tokens": 1500
+        },
+        "total_tokens": 6000
+      },
+      "piMessage": {
+        "role": "assistant",
+        "provider": "openai-codex",
+        "api": "openai-codex-responses",
+        "model": "gpt-5.3-codex",
+        "content": [],
+        "responseId": "synthetic-1000",
+        "usage": {
+          "input": 3000,
+          "output": 2000,
+          "cacheRead": 1000,
+          "cacheWrite": 0,
+          "reasoning": 1500,
+          "totalTokens": 6000,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "rawStopReason": "completed",
+        "stopReason": "stop"
+      }
+    },
+    {
+      "openaiUsage": {
+        "input_tokens": 4000,
+        "input_tokens_details": {
+          "cached_tokens": 2000,
+          "cache_write_tokens": 0
+        },
+        "output_tokens": 2000,
+        "output_tokens_details": {
+          "reasoning_tokens": 1500
+        },
+        "total_tokens": 6000
+      },
+      "piMessage": {
+        "role": "assistant",
+        "provider": "openai-codex",
+        "api": "openai-codex-responses",
+        "model": "gpt-5.3-codex",
+        "content": [],
+        "responseId": "synthetic-2000",
+        "usage": {
+          "input": 2000,
+          "output": 2000,
+          "cacheRead": 2000,
+          "cacheWrite": 0,
+          "reasoning": 1500,
+          "totalTokens": 6000,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "rawStopReason": "completed",
+        "stopReason": "stop"
+      }
+    },
+    {
+      "openaiUsage": {
+        "input_tokens": 4000,
+        "input_tokens_details": {
+          "cached_tokens": 3000,
+          "cache_write_tokens": 0
+        },
+        "output_tokens": 2000,
+        "output_tokens_details": {
+          "reasoning_tokens": 1500
+        },
+        "total_tokens": 6000
+      },
+      "piMessage": {
+        "role": "assistant",
+        "provider": "openai-codex",
+        "api": "openai-codex-responses",
+        "model": "gpt-5.3-codex",
+        "content": [],
+        "responseId": "synthetic-3000",
+        "usage": {
+          "input": 1000,
+          "output": 2000,
+          "cacheRead": 3000,
+          "cacheWrite": 0,
+          "reasoning": 1500,
+          "totalTokens": 6000,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "rawStopReason": "completed",
+        "stopReason": "stop"
+      }
+    },
+    {
+      "openaiUsage": {
+        "input_tokens": 4000,
+        "input_tokens_details": {
+          "cached_tokens": 1000,
+          "cache_write_tokens": 500
+        },
+        "output_tokens": 2000,
+        "output_tokens_details": {
+          "reasoning_tokens": 1500
+        },
+        "total_tokens": 6000
+      },
+      "piMessage": {
+        "role": "assistant",
+        "provider": "openai-codex",
+        "api": "openai-codex-responses",
+        "model": "gpt-6-astra",
+        "content": [],
+        "responseId": "synthetic-write",
+        "usage": {
+          "input": 2500,
+          "output": 2000,
+          "cacheRead": 1000,
+          "cacheWrite": 500,
+          "reasoning": 1500,
+          "totalTokens": 6000,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        },
+        "rawStopReason": "completed",
+        "stopReason": "stop"
+      }
+    }
+  ]
+}
