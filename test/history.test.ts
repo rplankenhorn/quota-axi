@@ -76,9 +76,32 @@ describe("verified API token-rate equivalents", () => {
       },
     });
     expect(priceHistorySample(value)).toEqual({ usd: 0.028805 });
+  });
+
+  it("prices Pi Codex when the exclusive shape is proven, and withholds cost when it is not", () => {
+    const proven = sample("codex", {
+      source: "pi",
+      inputIncludesCache: false,
+      tokens: {
+        inputTokens: 1000,
+        outputTokens: 2000,
+        cacheReadTokens: 3000,
+        cacheWriteTokens: 0,
+      },
+    });
+    expect(priceHistorySample(proven)).toEqual({ usd: 0.030275 });
     expect(
-      priceHistorySample({ ...value, inputIncludesCache: false, source: "pi" }),
-    ).toEqual({ usd: 0.029855 });
+      priceHistorySample({
+        ...proven,
+        tokens: { ...proven.tokens, cacheReadTokens: 600 },
+      }),
+    ).toEqual({ reason: "pi_codex_input_units_unverified" });
+    expect(
+      priceHistorySample({
+        ...proven,
+        tokens: { ...proven.tokens, cacheReadTokens: 0 },
+      }),
+    ).toEqual({ usd: 0.02975 });
   });
 
   it("applies GPT-6's verified long-context threshold to each request, not daily totals", () => {
@@ -236,7 +259,15 @@ describe("monthly budget velocity", () => {
       reason: "no_records",
     });
     expect(report([]).forecast[1].projectedMonthUsd).toBeUndefined();
-    const value = sample("codex", { timestamp: "2026-09-01T00:00:00.000Z" });
+    const value = sample("codex", {
+      timestamp: "2026-09-01T00:00:00.000Z",
+      tokens: {
+        inputTokens: 1000,
+        outputTokens: 1000,
+        cacheReadTokens: 3000,
+        cacheWriteTokens: 0,
+      },
+    });
     const result = report([value], value.timestamp).forecast[1];
     expect(result).toMatchObject({
       status: "unknown",
@@ -265,6 +296,35 @@ describe("monthly budget velocity", () => {
     });
     expect(result.forecast[1].apiEquivalentUsd).toBeUndefined();
     expect(result.forecast[1].projectedMonthUsd).toBeUndefined();
+  });
+
+  it("preserves tokens but withholds cost and projection for unverifiable Pi Codex units", () => {
+    const result = report([
+      sample("codex", {
+        source: "pi",
+        inputIncludesCache: false,
+        tokens: {
+          inputTokens: 1000,
+          outputTokens: 2000,
+          cacheReadTokens: 600,
+          cacheWriteTokens: 0,
+        },
+      }),
+    ]);
+    expect(result.daily[0]).toMatchObject({
+      unpricedRecords: 1,
+      unpricedReasons: ["pi_codex_input_units_unverified"],
+      tokens: { inputTokens: 1000, cacheReadTokens: 600 },
+    });
+    expect(result.daily[0].apiEquivalentUsd).toBeUndefined();
+    expect(result.forecast[1]).toMatchObject({
+      status: "unknown",
+      reason: "unpriced_usage",
+    });
+    expect(result.forecast[1].apiEquivalentUsd).toBeUndefined();
+    expect(result.forecast[1].projectedMonthUsd).toBeUndefined();
+    expect(result.forecast[1].dailyVelocityUsd).toBeUndefined();
+    expect(result.forecast[1].projectedOverageUsd).toBeUndefined();
   });
 
   it("discloses partial reads, while a known subtotal can still prove the budget was exceeded", () => {

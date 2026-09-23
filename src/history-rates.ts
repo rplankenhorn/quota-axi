@@ -91,6 +91,14 @@ export function priceHistorySample(sample: HistorySample): HistoryPrice {
     : undefined;
   if (!rate) return { reason: "model_rate_unverified" };
   const t = sample.tokens;
+  if (
+    sample.provider === "codex" &&
+    !sample.inputIncludesCache &&
+    t.cacheReadTokens > 0 &&
+    t.cacheReadTokens <= t.inputTokens
+  ) {
+    return { reason: "pi_codex_input_units_unverified" };
+  }
   const input =
     t.inputTokens - (sample.inputIncludesCache ? t.cacheReadTokens : 0);
   const prompt = input + t.cacheReadTokens + t.cacheWriteTokens;
