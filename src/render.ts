@@ -1,4 +1,5 @@
 import { encode } from "@toon-format/toon";
+import type { HistoryReport } from "./history.js";
 import { quotaHelpLines } from "./advice.js";
 import { accountColumns } from "./providers/accounts.js";
 import { collapseHome } from "./lib/fs.js";
@@ -22,6 +23,52 @@ const NONE = "none";
 const ID_SEPARATOR = " + ";
 /** Kept out of `,` so a detail never forces TOON string quoting on its own. */
 const DETAIL_SEPARATOR = " · ";
+
+export function renderHistoryToon(report: HistoryReport): string {
+  return [
+    encode({
+      generatedAt: report.generatedAt,
+      month: report.month,
+      timeZone: report.timeZone,
+      coverage: report.coverage,
+    }),
+    encode({
+      daily: report.daily.map((day) => ({
+        date: day.date,
+        provider: day.provider,
+        source: day.source,
+        model: day.model,
+        input: day.tokens.inputTokens,
+        inputIncludesCache: day.inputIncludesCache,
+        output: day.tokens.outputTokens,
+        cacheRead: day.tokens.cacheReadTokens,
+        cacheWrite: day.tokens.cacheWriteTokens,
+        apiEquivalentUsd: day.apiEquivalentUsd ?? UNKNOWN,
+        knownCostUsd: day.knownCostUsd,
+        unpricedRecords: day.unpricedRecords,
+      })),
+    }),
+    encode({
+      forecast: report.forecast.map((forecast) => ({
+        provider: forecast.provider,
+        budgetUsd: forecast.budgetUsd,
+        status: forecast.status,
+        dailyVelocityUsd: forecast.dailyVelocityUsd ?? UNKNOWN,
+        budgetVelocityUsd: forecast.budgetVelocityUsd,
+        projectedMonthUsd: forecast.projectedMonthUsd ?? UNKNOWN,
+        knownCostUsd: forecast.knownCostUsd,
+        reason: forecast.reason ?? NONE,
+      })),
+    }),
+    encode({ sources: report.sources }),
+    encode({ issues: report.issues }),
+    renderHelp([
+      `USD figures are standard global API-token-rate equivalents (${report.pricing.asOf}), not subscription charges or invoices.`,
+      "Velocity is observed month-to-date cost / elapsed UTC calendar days; missing local history is not evidence of zero usage. No cross-provider quota conversion.",
+      "Unknown models, unreported cache retention, and incomplete records withhold a complete forecast. --json includes price provenance and unpriced reasons.",
+    ]),
+  ].join("\n\n");
+}
 
 export function renderHelp(lines: string[]): string {
   return `help[${lines.length}]:\n${lines.map((line) => `  ${line}`).join("\n")}`;

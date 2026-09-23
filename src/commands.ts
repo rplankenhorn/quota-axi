@@ -1,6 +1,13 @@
 import { AxiError } from "axi-sdk-js";
 import { annotateQuotaAdvice } from "./advice.js";
-import { parseFlags, parseModelsFlags, type QuotaFlags } from "./args.js";
+import {
+  parseFlags,
+  parseHistoryFlags,
+  parseModelsFlags,
+  type QuotaFlags,
+} from "./args.js";
+import { createHistoryReport } from "./history.js";
+import { readHistory } from "./history-reader.js";
 import { writeCachedProviders } from "./cache.js";
 import { withQuotaSemantics } from "./interpretation.js";
 import { createModelsResponse, MODEL_CATALOG_PROVIDER_IDS } from "./models.js";
@@ -14,6 +21,7 @@ import {
   quotaJsonReport,
   redactedResponse,
   renderAuthToon,
+  renderHistoryToon,
   renderModelsToon,
   renderQuotaToon,
 } from "./render.js";
@@ -177,6 +185,23 @@ export async function modelsCommand(
   return flags.json
     ? JSON.stringify(response, null, 2)
     : renderModelsToon(response, binPath, flags.full);
+}
+
+export async function historyCommand(args: string[]): Promise<string> {
+  const generatedAt = nowIso();
+  const flags = parseHistoryFlags(args, generatedAt);
+  const read = await readHistory(flags.month, generatedAt, flags.providers);
+  const response = createHistoryReport(
+    read,
+    flags.month,
+    generatedAt,
+    flags.providers,
+  );
+  if (response.forecast.every((forecast) => forecast.records === 0))
+    process.exitCode = 1;
+  return flags.json
+    ? JSON.stringify(response, null, 2)
+    : renderHistoryToon(response);
 }
 
 export async function authCommand(
