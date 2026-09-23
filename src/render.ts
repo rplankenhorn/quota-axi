@@ -53,6 +53,7 @@ export function renderHistoryToon(report: HistoryReport): string {
         provider: forecast.provider,
         budgetUsd: forecast.budgetUsd,
         status: forecast.status,
+        confidence: forecast.projectionConfidence ?? UNKNOWN,
         dailyVelocityUsd: forecast.dailyVelocityUsd ?? UNKNOWN,
         budgetVelocityUsd: forecast.budgetVelocityUsd,
         projectedMonthUsd: forecast.projectedMonthUsd ?? UNKNOWN,

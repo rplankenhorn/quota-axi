@@ -73,10 +73,7 @@ export async function readHistory(
       : []),
     {
       source: "pi",
-      roots: [
-        process.env.PI_CODING_AGENT_SESSION_DIR?.trim() ||
-          join(resolvePiAgentDirectory(), "sessions"),
-      ],
+      roots: [join(resolvePiAgentDirectory(), "sessions")],
     },
   ];
   const { start, end } = historyMonthBounds(month);
@@ -376,7 +373,17 @@ class SessionParser {
         : message.provider === "openai-codex"
           ? "codex"
           : undefined;
-    if (!provider) return;
+    if (!provider) {
+      const attributed =
+        typeof message.provider === "string" && message.provider.length > 0;
+      if (
+        !attributed &&
+        message.usage !== undefined &&
+        this.relevant(row.timestamp)
+      )
+        this.issue("unattributed_pi_usage");
+      return;
+    }
     const usage = object(message.usage);
     const responseId = text(message.responseId);
     const id = text(row.id);

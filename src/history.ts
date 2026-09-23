@@ -1,4 +1,5 @@
 import { HISTORY_RATE_CARD, priceHistorySample } from "./history-rates.js";
+import { PACE_EARLY_ELAPSED_PERCENT } from "./pace.js";
 
 export const HISTORY_PROVIDERS = ["claude", "codex"] as const;
 export type HistoryProvider = (typeof HISTORY_PROVIDERS)[number];
@@ -70,6 +71,7 @@ export type HistoryForecast = {
   knownCostUsd: number;
   elapsedDays: number;
   monthDays: number;
+  projectionConfidence?: "early" | "established";
   apiEquivalentUsd?: number;
   dailyVelocityUsd?: number;
   budgetVelocityUsd: number;
@@ -213,6 +215,10 @@ export function createHistoryReport(
     if (reason) return { ...result, reason };
     const velocity = knownCostUsd / elapsedDays;
     const projected = velocity * monthDays;
+    const projectionConfidence =
+      (elapsedDays / monthDays) * 100 < PACE_EARLY_ELAPSED_PERCENT
+        ? "early"
+        : "established";
     return {
       ...result,
       status:
@@ -221,6 +227,7 @@ export function createHistoryReport(
           : projected > budgetUsd
             ? "projected_over_budget"
             : "within_budget_at_observed_pace",
+      projectionConfidence,
       apiEquivalentUsd: money(knownCostUsd),
       dailyVelocityUsd: money(velocity),
       projectedMonthUsd: money(projected),

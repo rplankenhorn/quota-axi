@@ -23,7 +23,6 @@ beforeEach(() => {
   vi.stubEnv("CLAUDE_CONFIG_DIR", join(root, "claude"));
   vi.stubEnv("CODEX_HOME", join(root, "codex"));
   vi.stubEnv("PI_CODING_AGENT_DIR", join(root, "pi"));
-  vi.stubEnv("PI_CODING_AGENT_SESSION_DIR", undefined);
   vi.stubEnv("XDG_CACHE_HOME", join(root, "cache"));
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(NOW));
@@ -349,9 +348,9 @@ describe("history CLI using synthetic local stores", () => {
     ]);
   });
 
-  it("honors provider selection, archived months, UTC date grouping, and explicit Pi session locations", async () => {
-    vi.stubEnv("PI_CODING_AGENT_SESSION_DIR", join(root, "custom-sessions"));
-    write("custom-sessions/session.jsonl", [
+  it("honors provider selection, archived months, UTC date grouping, and relocated Pi agent roots", async () => {
+    vi.stubEnv("PI_CODING_AGENT_DIR", join(root, "custom-agent"));
+    write("custom-agent/sessions/session.jsonl", [
       pi(),
       pi("claude-pi", "claude-opus-4-6", { provider: "anthropic" }),
     ]);
@@ -595,6 +594,24 @@ describe("honest partial-history failures", () => {
       count: 2,
     });
     expect(result.forecast[1].projectedMonthUsd).toBeUndefined();
+  });
+
+  it("discloses assistant usage with no provider attribution, but excludes explicit other providers", async () => {
+    write("pi/sessions/log.jsonl", [
+      pi("no-provider", "gpt-5.3-codex", { provider: undefined }),
+      pi("other-provider", "gpt-5.3-codex", { provider: "openai" }),
+    ]);
+    const result = await json();
+    expect(result.daily).toEqual([]);
+    expect(result.issues).toContainEqual({
+      source: "pi",
+      reason: "unattributed_pi_usage",
+      count: 1,
+    });
+    expect(result.forecast[1]).toMatchObject({
+      status: "unknown",
+      reason: "incomplete_history",
+    });
   });
 
   it("skips symlinks and directory errors, leaving forecast unknown rather than silently undercounting", async () => {
