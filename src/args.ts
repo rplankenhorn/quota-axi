@@ -1,4 +1,5 @@
 import { AxiError } from "axi-sdk-js";
+import { HISTORY_PROVIDERS, type HistoryProvider } from "./history.js";
 import { MODEL_CATALOG_PROVIDER_IDS } from "./models.js";
 import { parseProviders } from "./providers/index.js";
 import {
@@ -237,6 +238,66 @@ function parseCommonFlags(
     ...(intelligence ? { intelligence } : {}),
     ...(sort ? { sort } : {}),
   };
+}
+
+export function parseHistoryFlags(
+  args: string[],
+  generatedAt: string,
+): {
+  providers: HistoryProvider[];
+  month: string;
+  json: boolean;
+} {
+  let providers: HistoryProvider[] = [...HISTORY_PROVIDERS];
+  let month = generatedAt.slice(0, 7);
+  let json = false;
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (arg === "--") continue;
+    if (arg === "--json") {
+      json = true;
+      continue;
+    }
+    const [flag, inline] = arg.split(/=(.*)/s, 2);
+    if (flag !== "--month" && flag !== "--provider") {
+      throw new AxiError(
+        `unknown history argument: ${arg}`,
+        "VALIDATION_ERROR",
+        ["Run `quota-axi history --help`"],
+      );
+    }
+    const value = inline ?? args[++index];
+    if (!value || value.startsWith("--")) {
+      throw new AxiError(`${flag} requires a value`, "VALIDATION_ERROR");
+    }
+    if (flag === "--month") month = value;
+    else {
+      const selected = value.split(",").map((entry) => entry.trim());
+      if (
+        selected.some(
+          (entry) => !HISTORY_PROVIDERS.includes(entry as HistoryProvider),
+        )
+      ) {
+        throw new AxiError(
+          "history supports only claude,codex",
+          "VALIDATION_ERROR",
+        );
+      }
+      providers = HISTORY_PROVIDERS.filter((provider) =>
+        selected.includes(provider),
+      );
+    }
+  }
+  if (
+    !/^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(month) ||
+    month > generatedAt.slice(0, 7)
+  ) {
+    throw new AxiError(
+      "--month requires YYYY-MM, no later than the current UTC month",
+      "VALIDATION_ERROR",
+    );
+  }
+  return { providers, month, json };
 }
 
 function parseIntelligenceValue(

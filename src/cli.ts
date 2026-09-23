@@ -1,6 +1,7 @@
 import { runAxiCli } from "axi-sdk-js";
 import {
   authCommand,
+  historyCommand,
   modelsCommand,
   quotaCommand,
   type QuotaContext,
@@ -11,16 +12,18 @@ import { VERSION } from "./version.js";
 export const DESCRIPTION =
   "Report local agent-provider quota windows and model quota evidence.";
 
-export const TOP_HELP = `usage: quota-axi [quota|auth|models] [flags]
-commands[3]:
-  (none)=quota, auth, models
+export const TOP_HELP = `usage: quota-axi [quota|auth|models|history] [flags]
+commands[4]:
+  (none)=quota, auth, models, history
 output:
   Default TOON reports local quota evidence. models is a deterministic data join; --sort runway is explicit opt-in ordering. --tui renders a live human terminal report instead (q quits).
 notes:
   Every quota read, including each --tui refresh, may delegate an expired session's renewal to the vendor CLI that owns it. --no-credential-refresh disables delegated credential refresh; auth is always read-only.
   --profile-only requires explicit CLAUDE_CONFIG_DIR or CODEX_HOME plus exactly one matching provider. It reads only that credential file: no Keychain, Pi, CLI RPC, fallback, refresh, or cache. With --full --json, non-secret account identity, source, and attempts remain visible; tokens and file contents remain excluded, and ordinary output remains redacted.
-flags[14]:
-  --provider <${PROVIDER_IDS.join(",")}>, --json, --full, --tui, --refresh <30s-24h>, --once, --allow-keychain-prompt, --allow-claude-inference, --no-credential-refresh, --profile-only, --intelligence <high|medium|low>, --sort <runway>, --help, -v/--version
+history:
+  history [--month YYYY-MM] [--provider claude,codex] [--json] reads local Claude Code, Codex CLI, and Pi session usage only (UTC). Reports daily tokens and standard API-rate-equivalent monthly velocity against Claude $3500 / Codex $600 budgets. Not an invoice or complete account history; unverified prices stay unknown. No provider calls, credential reads, cache writes, or inference.
+flags[15]:
+  --month <YYYY-MM>, --provider <${PROVIDER_IDS.join(",")}>, --json, --full, --tui, --refresh <30s-24h>, --once, --allow-keychain-prompt, --allow-claude-inference, --no-credential-refresh, --profile-only, --intelligence <high|medium|low>, --sort <runway>, --help, -v/--version
 examples:
   quota-axi
   quota-axi --provider claude
@@ -38,6 +41,8 @@ examples:
   quota-axi auth
   quota-axi models --intelligence high
   quota-axi models --sort runway
+  quota-axi history
+  quota-axi history --month 2026-09 --json
 `;
 
 type MainOptions = {
@@ -60,13 +65,17 @@ export async function main(options: MainOptions = {}): Promise<void> {
       quota: quotaCommand,
       auth: authCommand,
       models: modelsCommand,
+      history: historyCommand,
     },
     // `quota` is the implicit default command, so the bare-invocation home view
     // is never reached (see normalizeArgv); wiring it keeps the SDK contract.
     home: quotaCommand,
     resolveContext: () => ({ binPath }),
     getCommandHelp: (command) =>
-      command === "quota" || command === "auth" || command === "models"
+      command === "quota" ||
+      command === "auth" ||
+      command === "models" ||
+      command === "history"
         ? TOP_HELP
         : undefined,
   });
@@ -105,6 +114,7 @@ export function normalizeArgv(raw: string[]): string[] {
     first === "quota" ||
     first === "auth" ||
     first === "models" ||
+    first === "history" ||
     first === "update"
   ) {
     return raw;
@@ -129,7 +139,7 @@ function findLegacyFlag(
 ): number {
   for (let index = 0; index < raw.length; index++) {
     const arg = raw[index];
-    if (arg === "--provider") {
+    if (arg === "--provider" || arg === "--month") {
       index++;
       continue;
     }
@@ -141,7 +151,7 @@ function findLegacyFlag(
 function findCommand(raw: string[]): number {
   for (let index = 0; index < raw.length; index++) {
     const arg = raw[index];
-    if (arg === "--provider") {
+    if (arg === "--provider" || arg === "--month") {
       index++;
       continue;
     }
@@ -149,6 +159,7 @@ function findCommand(raw: string[]): number {
       arg === "quota" ||
       arg === "auth" ||
       arg === "models" ||
+      arg === "history" ||
       arg === "update"
     ) {
       return index;

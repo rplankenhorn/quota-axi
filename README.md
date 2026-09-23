@@ -22,6 +22,7 @@ It is data only: it never routes, recommends a provider, model, harness, credent
 - **Local first** - quota and auth reports run on the machine that holds the credentials; their network calls go to first-party provider endpoints, never a third-party relay.
   The separate `update` command contacts npm only when the user runs it.
 - **Token efficient** - default stdout is compact TOON so agents spend fewer tokens parsing quota state, with `--json` available when a caller needs the normalized model.
+- **Local usage history** - the separate [`history`](#daily-history-and-monthly-budget-velocity) command reports daily Claude/Codex session tokens and API-rate-equivalent budget velocity, without calling providers or reading credentials.
 
 ## Quick Start
 
@@ -311,20 +312,21 @@ It is generated from `src/skill.ts`; update it with `pnpm run build:skill` and v
 
 ## CLI Reference
 
-| Command          | Description                                          |
-| ---------------- | ---------------------------------------------------- |
-| `quota-axi`      | Report supported local quota windows                 |
-| `auth`           | Report local auth-source availability, no values     |
-| `models`         | Join curated model buckets with local quota evidence |
-| `update`         | Upgrade quota-axi to the latest published version    |
-| `update --check` | Report current vs. latest without installing         |
+| Command          | Description                                                |
+| ---------------- | ---------------------------------------------------------- |
+| `quota-axi`      | Report supported local quota windows                       |
+| `auth`           | Report local auth-source availability, no values           |
+| `models`         | Join curated model buckets with local quota evidence       |
+| `history`        | Daily Claude/Codex local usage and monthly budget velocity |
+| `update`         | Upgrade quota-axi to the latest published version          |
+| `update --check` | Report current vs. latest without installing               |
 
 ### Flags
 
 | Flag                                                                                                                                   | Description                                                               |
 | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `--provider claude,codex,cursor,copilot,grok,kimi,zai,agy,alibaba,opencode-go,commandcode,minimax,mimo,deepseek,openrouter,elevenlabs` | Scope providers                                                           |
-| `--json`                                                                                                                               | Emit normalized JSON instead of TOON for quota, auth, or models           |
+| `--json`                                                                                                                               | Emit normalized JSON instead of TOON for quota, auth, models, or history  |
 | `--full`                                                                                                                               | Include audit and derivation details                                      |
 | `--tui`                                                                                                                                | Render the live human terminal report instead of TOON (quota only)        |
 | `--refresh 30s\|5m\|1h`                                                                                                                | Live `--tui` refresh interval, default 5m (30s-24h)                       |
@@ -337,6 +339,53 @@ It is generated from `src/skill.ts`; update it with `pnpm run build:skill` and v
 | `--sort runway`                                                                                                                        | Explicitly sort `models` by documented usable-runway evidence             |
 | `-h`, `--help`                                                                                                                         | Print terse [AXI](https://axi.md) help                                    |
 | `-v`, `-V`, `--version`                                                                                                                | Print version                                                             |
+
+### Daily history and monthly budget velocity
+
+```sh
+quota-axi history                                # current UTC month, both providers
+quota-axi history --month 2026-09                 # a historical month
+quota-axi history --provider codex --json         # structured evidence and forecast
+```
+
+`history` accepts only `--month YYYY-MM`, `--provider claude,codex`, `--json`, and help/version flags. Future months are rejected. Existing quota, auth, models, and TUI output contracts are unchanged; history has its own JSON `schemaVersion: 1` and default TOON `daily[]`, `forecast[]`, `sources[]`, and `issues[]` blocks.
+
+**Standing monthly budgets are $3,500 for Claude and $600 for Codex, measured at API token rates.** Each provider has its own forecast; neither quota percentages nor token counts are converted into the other provider's units. This is a local usage report, **not an invoice, subscription charge, or complete account-wide billing history**. All local accounts represented in the selected session directories contribute to that provider's budget; history does not inspect credentials to identify accounts.
+
+#### Local history sources
+
+| Source      | Read-only location                                                         | Usage evidence                                                                                                                                                                    |
+| ----------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude Code | `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/**/*.jsonl`, including subagents | Assistant `message.usage`; repeated content blocks/copies of a response count once by message ID                                                                                  |
+| Codex CLI   | `${CODEX_HOME:-~/.codex}/{sessions,archived_sessions}/**/*.jsonl`          | `event_msg` / `token_count` cumulative deltas, with the model from `turn_context`; repeated unchanged totals and copied rollouts count once                                       |
+| Pi          | `${PI_CODING_AGENT_DIR:-~/.pi/agent}/sessions/**/*.jsonl`                  | Assistant and model-attributed `usage` entries from exact `anthropic` and `openai-codex` providers; response IDs, or entry IDs plus timestamp/model, deduplicate forks and clones |
+
+No provider CLI is launched, and no API, credential store, or quota cache is read or written. Session lines can contain sensitive conversation text; they are parsed locally in memory, but only usage/model/time metadata is retained for aggregation. Prompts, responses, tool arguments, file paths, account details, and session/message IDs are never included in the report or persisted. History does not create a database or background collector: it rereads existing logs. The Pi session root is `${PI_CODING_AGENT_DIR:-~/.pi/agent}/sessions`; configuration files and CLI `--session-dir` overrides are not scanned.
+
+`daily[]` has one row per observed UTC date, provider, source, and model. Missing days are omitted, **not asserted to have zero usage**. Claude and Pi `inputTokens` exclude cache reads/writes; native Codex `inputTokens` include `cacheReadTokens`, explicitly marked by `inputIncludesCache`. `reasoningOutputTokens` are already included in output, and `cacheWrite1hTokens` are a subset of cache writes; neither is added twice. JSON retains those optional reported counters. Counts stay in tokens, not provider quota percentages or invented credits.
+
+#### Pricing evidence and unknowns
+
+`pricing` names the bundled reference-rate date and first-party sources: [Claude pricing](https://platform.claude.com/docs/en/about-claude/pricing), [OpenAI pricing](https://developers.openai.com/api/docs/pricing), and the cited model pages. `src/history-rates.ts` owns the exact model allowlist and USD-per-million-token rates. It currently covers Claude 4.5 and newer named models in that list, GPT-5.2-Codex, GPT-5.3-Codex, and GPT-6 Astra/Sol/Luna. No unrecognized alias inherits a rate.
+
+`apiEquivalentUsd` reprices the recorded tokens at **standard global API reference rates**, including cache categories and verified per-request long-context thresholds. It is not a historical tariff lookup and does not include fast/priority or regional premiums, batch discounts, tool fees, taxes, or subscription charges. Pi's stored `usage.cost` is not trusted as billing evidence. Unverified models/rates, unfamiliar token counters, or Claude cache writes without an established retention split leave the record unpriced; its native tokens remain visible. Older Claude long-context requests without a verified tariff likewise stay unpriced. Pi `openai-codex` input is verified cache-exclusive, not guessed from the counter values: the publisher's [`processResponsesStream` normalizer](https://github.com/earendil-works/pi/blob/f07218c4d4bbc12bef056a7058c3dd49dfe41abe/packages/ai/src/api/openai-responses-shared.ts) in `@earendil-works/pi-ai` 0.87.1 subtracts both cached and cache-write tokens from OpenAI's inclusive input before persisting `usage.input`. Both Codex transports use that normalizer. [Pinned provenance and an offline reproduction](test/fixtures/history/README.md) cover cached input below, equal to, and above Pi input, plus cache writes. Those numeric comparisons never establish units; the producer contract does. No Pi cost claim or inferred cross-provider equivalence is used.
+
+`knownCostUsd` is only the priced subtotal. An unpriced daily row omits its complete `apiEquivalentUsd` and names `unpricedRecords` / `unpricedReasons` in JSON. A monthly forecast with any unpriced usage or read/parse problem omits the complete total and projected dollars rather than treating the missing amount as zero. A known subtotal already above the budget can still prove `over_budget`, with the incomplete reason attached.
+
+Unreadable, malformed, oversized, or truncated records, contradictory duplicate records, symlinked histories, and Codex counter resets appear in `issues[]`. A truncated Codex log's initial cumulative total is never all assigned to its first observed day: only its last-call counters can be attributed there, and the missing history is disclosed. Pi compaction, branch-summary, or nested-tool usage without provider/model attribution is disclosed as incomplete, never assigned to a guessed model. An issue in an unattributed Pi record can affect both provider forecasts. The scanner bounds JSONL lines at 8 MiB, directory nesting at 32 levels, and files at 100,000 per source; skipped material is disclosed, not silently treated as free usage.
+
+#### Forecast calculation
+
+For a fully priced, readable set of local records:
+
+- `dailyVelocityUsd = month-to-date API-equivalent USD / elapsed UTC calendar days` (including fractions of the current day, not just active days).
+- `budgetVelocityUsd = monthly budget / actual days in that calendar month`.
+- `projectedMonthUsd = dailyVelocityUsd × days in month`; `projectedOverageUsd` is the positive excess above budget.
+- `remainingBudgetUsd` is budget minus observed cost and can be negative. A past month's elapsed time is capped at month-end, so its projection equals its observed total.
+
+Status is `over_budget` when observed cost already exceeds budget, `projected_over_budget` when the projection exceeds it, or `within_budget_at_observed_pace` otherwise. Exact equality is not an exceedance. A projected forecast also carries `projectionConfidence`: `early` when less than 10% of the calendar month has elapsed (so a single early day extrapolates over the whole month), otherwise `established`. No records, zero elapsed time, unpriced usage, or incomplete history yield `unknown` with a reason (except a subtotal that already proves overspend). These are deterministic pace estimates, not routing advice or predictions of future workload.
+
+Every report labels its coverage `local_records_only`: missing/deleted sessions, other machines, ephemeral Pi sessions, and activity not logged by these harnesses cannot be recovered. Even `within_budget_at_observed_pace` is conditional on that coverage, never proof that the account is under budget. Exit 0 means at least one selected provider has usable token records, even if pricing is unknown; exit 1 means none does, and exit 2 is invalid usage.
 
 ### Profile-only quota reads
 
@@ -953,6 +1002,8 @@ A `refresh_timed_out` run is never treated as a credential verdict. Claude repor
 Providers with no established non-interactive rotation command stay read-only on purpose. That is a documented limitation rather than a reason to force an unsafe path: Cursor's CLI token is long-lived and no non-interactive `cursor-agent` command was observed to rotate it, GitHub Copilot has no established non-interactive rotation command for its supported sources, Z.AI uses a non-expiring API key, Alibaba is accessed through the read-only `bl` usage command, OpenCode Go has no vendor-owned rotation command, Pi-owned OAuth entries (`openai-codex`, `xai`, `kimi-coding`, `commandcode`) have no non-interactive Pi refresh command, Command Code API keys do not expire, ElevenLabs API keys do not expire either, and Antigravity exposes no credential store at all.
 
 ### Safety guarantees
+
+The opt-in `history` command has a separate, entirely local [session-history read boundary](#local-history-sources). It performs no provider or credential operations and persists neither transcripts nor aggregates.
 
 - Quota and auth HTTP requests go only to first-party provider usage, quota, billing, entitlement, or read-only credential-liveness endpoints with the user's local credentials; quota-axi's direct Antigravity requests stay on 127.0.0.1 loopback.
 - The user-initiated `update` command is the only outbound non-provider network surface, and it is not part of quota measurement.
