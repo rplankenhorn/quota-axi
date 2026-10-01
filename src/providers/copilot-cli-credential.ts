@@ -9,8 +9,18 @@ import {
 import { execFileText } from "../lib/process.js";
 import { readWindowsGenericPassword } from "../lib/windows-credential.js";
 import type { AuthSourceReport, ProviderOptions } from "../types.js";
+import { traceInput } from "../lib/input-trace.js";
 
 export const COPILOT_CLI_SOURCE = "copilot-cli:keychain";
+/**
+ * The native source's skips that establish nothing about the account either
+ * way: a configuration that names no account it can confirm, a platform
+ * without a supported secure store, and a selected account whose secure-store
+ * value is still waiting on consent. None of them proves Copilot absent.
+ */
+export const COPILOT_CLI_UNCONFIRMED_ACCOUNT = "selected_account_unconfirmed";
+export const COPILOT_CLI_SECURE_STORE_UNSUPPORTED = "secure_store_unsupported";
+export const COPILOT_CLI_KEYCHAIN_PROMPT_REQUIRED = "keychain_prompt_required";
 const SERVICE = "copilot-cli";
 const FILE_LIMIT = 1024 * 1024;
 const TOKEN_LIMIT = 16 * 1024;
@@ -70,8 +80,11 @@ function dependencies(overrides: Partial<Dependencies>): Dependencies {
     readFile: readBoundedFile,
     run: execFileText,
     readWindows: readWindowsGenericPassword,
-    hasGrant: (path, account) =>
-      existsSync(copilotCliKeychainAccessMarkerPath(path, SERVICE, account)),
+    hasGrant: (path, account) => {
+      const marker = copilotCliKeychainAccessMarkerPath(path, SERVICE, account);
+      traceInput(marker);
+      return existsSync(marker);
+    },
     recordGrant,
     ...overrides,
   };
@@ -145,9 +158,9 @@ async function selectIdentity(
     return blocked("structurally_invalid", "credentials_invalid", false);
   }
   if (!identity)
-    return blocked("unsupported", "selected_account_unconfirmed", true);
+    return blocked("unsupported", COPILOT_CLI_UNCONFIRMED_ACCOUNT, true);
   if (!secureStoreSupported(deps.platform))
-    return blocked("unsupported", "secure_store_unsupported", true);
+    return blocked("unsupported", COPILOT_CLI_SECURE_STORE_UNSUPPORTED, true);
   return { kind: "identity", identity, path, home, defaultHome };
 }
 
@@ -173,7 +186,12 @@ export async function resolveCopilotCliCredential(
     status: Exclude<CopilotCliCredentialResolution["status"], "resolved">,
     error?: string,
   ): CopilotCliCredentialResolution =>
-    unresolved(path, status, error, error === "keychain_prompt_required");
+    unresolved(
+      path,
+      status,
+      error,
+      error === COPILOT_CLI_KEYCHAIN_PROMPT_REQUIRED,
+    );
   if (resolve(home) !== resolve(defaultHome))
     return state("unsupported", "copilot_home_unsupported");
   // Presence only: never inspect an environment credential's value. A blank
@@ -202,7 +220,8 @@ export async function resolveCopilotCliCredential(
   if (deps.platform === "win32") {
     // CredRead returns the secret along with metadata. Until consent is
     // established, inspect only the CLI's selected identity, never the vault.
-    if (!valueAllowed) return state("unsupported", "keychain_prompt_required");
+    if (!valueAllowed)
+      return state("unsupported", COPILOT_CLI_KEYCHAIN_PROMPT_REQUIRED);
     const result = await deps.readWindows(
       { target: `${identity.account}.${SERVICE}`, username: identity.account },
       { run: deps.run, systemRoot: deps.environment.SystemRoot },
@@ -250,7 +269,8 @@ export async function resolveCopilotCliCredential(
       );
     }
   }
-  if (!valueAllowed) return state("unsupported", "keychain_prompt_required");
+  if (!valueAllowed)
+    return state("unsupported", COPILOT_CLI_KEYCHAIN_PROMPT_REQUIRED);
   const token = value.replace(/[\r\n]+$/, "");
   if (
     token.length > TOKEN_LIMIT ||
@@ -268,7 +288,7 @@ export async function resolveCopilotCliCredential(
       return state("unsupported", "selected_account_changed");
     }
   } catch {
-    return state("read_error", "selected_account_unconfirmed");
+    return state("read_error", COPILOT_CLI_UNCONFIRMED_ACCOUNT);
   }
   deps.recordGrant(path, identity.account);
   return {
@@ -319,6 +339,7 @@ function code(error: unknown): unknown {
 function recordGrant(path: string, account: string): void {
   try {
     const file = copilotCliKeychainAccessMarkerPath(path, SERVICE, account);
+    if (existsSync(file)) return;
     ensurePrivateParent(file);
     const temp = `${file}.${process.pid}.tmp`;
     writeFileSync(temp, "granted\n", { mode: 0o600 });
