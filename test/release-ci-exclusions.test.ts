@@ -1,7 +1,16 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { load as loadYaml } from "js-yaml";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -497,5 +506,155 @@ describe("release-please CI exclusions", () => {
     ]);
     expect(on!.release).toBeUndefined();
     expect(on!.workflow_dispatch).toBeUndefined();
+  });
+});
+
+const releaseBot = {
+  name: "github-actions[bot]",
+  email: "41898282+github-actions[bot]@users.noreply.github.com",
+};
+const contributor = { name: "Contributor", email: "contributor@example.com" };
+
+/** The guard step's own shell, executed as the workflow runs it. */
+function guardScript(): string {
+  const doc = loadYaml(
+    readFileSync(join(workflowsDir, "guard-generated-files.yml"), "utf8"),
+  ) as { jobs: { check: { steps: Array<{ name?: string; run?: string }> } } };
+  const step = doc.jobs.check.steps.find((s) =>
+    s.name?.startsWith("Check PR does not modify"),
+  );
+  if (!step?.run) throw new Error("guard step not found");
+  return step.run;
+}
+
+describe("generated-file guard", () => {
+  let repo: string | undefined;
+
+  afterEach(() => {
+    if (repo) rmSync(repo, { recursive: true, force: true });
+    repo = undefined;
+  });
+
+  function git(...args: string[]): string {
+    return execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
+  }
+
+  function commit(
+    author: { name: string; email: string },
+    subject: string,
+    files: Record<string, string>,
+  ): string {
+    for (const [path, content] of Object.entries(files)) {
+      writeFileSync(join(repo!, path), content);
+      git("add", path);
+    }
+    execFileSync("git", ["commit", "-q", "--allow-empty", "-m", subject], {
+      cwd: repo,
+      env: {
+        ...process.env,
+        GIT_AUTHOR_NAME: author.name,
+        GIT_AUTHOR_EMAIL: author.email,
+        GIT_COMMITTER_NAME: author.name,
+        GIT_COMMITTER_EMAIL: author.email,
+      },
+    });
+    return git("rev-parse", "HEAD");
+  }
+
+  function initRepo(): string {
+    repo = mkdtempSync(join(tmpdir(), "quota-axi-guard-"));
+    git("init", "-q", "-b", "main");
+    return commit(contributor, "chore: base", {
+      "CHANGELOG.md": "# Changelog\n",
+      ".release-please-manifest.json": '{".": "0.1.0"}\n',
+      "src.txt": "base\n",
+    });
+  }
+
+  function runGuard(base: string, head: string) {
+    return spawnSync("bash", ["-e", "-c", guardScript()], {
+      cwd: repo,
+      encoding: "utf8",
+      env: { ...process.env, BASE_SHA: base, HEAD_SHA: head },
+    });
+  }
+
+  it("rejects a hand edit of a release-please file", () => {
+    const base = initRepo();
+    const head = commit(contributor, "chore(main): release quota-axi 0.1.1", {
+      "CHANGELOG.md": "# Changelog\n\n## 0.1.1\n",
+    });
+
+    const result = runGuard(base, head);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "This PR modifies release-please-generated files: CHANGELOG.md",
+    );
+  });
+
+  it("accepts release-please commits merged in from upstream", () => {
+    const base = initRepo();
+    git("checkout", "-q", "-b", "upstream");
+    commit(releaseBot, "chore(main): release quota-axi 0.1.1 (#1)", {
+      "CHANGELOG.md": "# Changelog\n\n## 0.1.1\n",
+      ".release-please-manifest.json": '{".": "0.1.1"}\n',
+    });
+    git("checkout", "-q", "-b", "sync", base);
+    commit(contributor, "feat: fork work", { "src.txt": "fork\n" });
+    git("merge", "-q", "--no-edit", "upstream");
+    const head = git("rev-parse", "HEAD");
+
+    const result = runGuard(base, head);
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+  });
+
+  it("rejects a later hand edit on top of a release-please commit", () => {
+    const base = initRepo();
+    commit(releaseBot, "chore(main): release quota-axi 0.1.1 (#1)", {
+      "CHANGELOG.md": "# Changelog\n\n## 0.1.1\n",
+    });
+    const head = commit(contributor, "docs: tweak changelog", {
+      "CHANGELOG.md": "# Changelog\n\n## 0.1.1 edited\n",
+    });
+
+    expect(runGuard(base, head).status).toBe(1);
+  });
+
+  it("rejects a bot commit that is not a release commit", () => {
+    const base = initRepo();
+    const head = commit(releaseBot, "chore: bump changelog", {
+      "CHANGELOG.md": "# Changelog\n\n## 0.1.1\n",
+    });
+
+    expect(runGuard(base, head).status).toBe(1);
+  });
+
+  it("rejects a merge resolution that rewrites a release-please file", () => {
+    const base = initRepo();
+    git("checkout", "-q", "-b", "upstream");
+    commit(releaseBot, "chore(main): release quota-axi 0.1.1 (#1)", {
+      "CHANGELOG.md": "# Changelog\n\n## 0.1.1\n",
+    });
+    git("checkout", "-q", "-b", "sync", base);
+    git("merge", "-q", "--no-ff", "--no-commit", "upstream");
+    writeFileSync(join(repo!, "CHANGELOG.md"), "# Changelog\n\nhand\n");
+    git("add", "CHANGELOG.md");
+    const head = commit(contributor, "Merge upstream", {});
+
+    const result = runGuard(base, head);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("CHANGELOG.md");
+  });
+
+  it("accepts a pull request that creates a release-please file", () => {
+    repo = mkdtempSync(join(tmpdir(), "quota-axi-guard-"));
+    git("init", "-q", "-b", "main");
+    const base = commit(contributor, "chore: base", { "src.txt": "base\n" });
+    const head = commit(contributor, "chore: wire release-please", {
+      "CHANGELOG.md": "# Changelog\n",
+    });
+
+    expect(runGuard(base, head).status).toBe(0);
   });
 });

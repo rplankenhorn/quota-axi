@@ -32,6 +32,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
   if (originalAppsJson === undefined)
     delete process.env.GITHUB_COPILOT_APPS_JSON;
   else process.env.GITHUB_COPILOT_APPS_JSON = originalAppsJson;
@@ -814,6 +815,9 @@ describe("GitHub Copilot credential sources", () => {
     it("keeps a Copilot CLI account awaiting Keychain consent in view", async () => {
       const originalCopilotHome = process.env.COPILOT_HOME;
       delete process.env.COPILOT_HOME;
+      // An environment token in the developer's shell would answer first.
+      for (const name of ["COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"])
+        vi.stubEnv(name, undefined);
       process.env.HOME = join(tempDir!, "home");
       stubUserEndpoint({});
       try {

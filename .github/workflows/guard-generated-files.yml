@@ -44,13 +44,37 @@ jobs:
           set -eu
           files=$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")
 
+          # True when only release-please changed the path in this PR, e.g. a
+          # sync that merges upstream release commits. The HEAD blob must equal
+          # the newest release commit's blob, so a merge resolution or later
+          # hand edit cannot ride along.
+          release_only() {
+            commits=$(git log --no-merges --full-history --format='%H %ae %s' \
+              "${BASE_SHA}..${HEAD_SHA}" -- "$1")
+            [ -n "$commits" ] || return 1
+            newest=""
+            while read -r sha email subject; do
+              [ "$email" = "41898282+github-actions[bot]@users.noreply.github.com" ] || return 1
+              case "$subject" in
+                "chore(main): release "*) ;;
+                *) return 1 ;;
+              esac
+              [ -n "$newest" ] || newest="$sha"
+            done <<EOF
+          $commits
+          EOF
+            head_blob=$(git rev-parse -q --verify "${HEAD_SHA}:$1") || return 1
+            [ "$head_blob" = "$(git rev-parse -q --verify "${newest}:$1")" ]
+          }
+
           violated=""
           for path in CHANGELOG.md .release-please-manifest.json; do
             if printf '%s\n' "$files" | grep -qxF -- "$path"; then
               # Only a violation if the file already existed on the base branch.
               # A PR that creates it for the first time (e.g. wiring up
               # release-please) is not hand-editing bot-owned content.
-              if git cat-file -e "${BASE_SHA}:${path}" 2>/dev/null; then
+              if git cat-file -e "${BASE_SHA}:${path}" 2>/dev/null &&
+                ! release_only "$path"; then
                 violated="${violated} ${path}"
               fi
             fi
