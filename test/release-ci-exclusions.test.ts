@@ -564,6 +564,9 @@ describe("generated-file guard", () => {
   function initRepo(): string {
     repo = mkdtempSync(join(tmpdir(), "quota-axi-guard-"));
     git("init", "-q", "-b", "main");
+    // `git merge` commits with the repo identity; CI runners have none.
+    git("config", "user.name", contributor.name);
+    git("config", "user.email", contributor.email);
     return commit(contributor, "chore: base", {
       "CHANGELOG.md": "# Changelog\n",
       ".release-please-manifest.json": '{".": "0.1.0"}\n',
