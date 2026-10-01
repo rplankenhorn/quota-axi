@@ -498,6 +498,14 @@ describe("history CLI using synthetic local stores", () => {
     expect(toon).not.toContain("999999");
   });
 
+  it("unions repeated --provider flags instead of keeping only the last", async () => {
+    const result = await json(["--provider", "claude", "--provider", "codex"]);
+    expect(result.forecast.map((forecast) => forecast.provider)).toEqual([
+      "claude",
+      "codex",
+    ]);
+  });
+
   it("reports no histories as unknown with exit 1, without invented zero-use daily rows", async () => {
     const result = await json();
     expect(result.daily).toEqual([]);

@@ -291,7 +291,7 @@ export function parseHistoryFlags(
   month: string;
   json: boolean;
 } {
-  let providers: HistoryProvider[] = [...HISTORY_PROVIDERS];
+  const providers: HistoryProvider[] = [];
   let month = generatedAt.slice(0, 7);
   let json = false;
   for (let index = 0; index < args.length; index++) {
@@ -326,9 +326,9 @@ export function parseHistoryFlags(
           "VALIDATION_ERROR",
         );
       }
-      providers = HISTORY_PROVIDERS.filter((provider) =>
-        selected.includes(provider),
-      );
+      for (const provider of selected as HistoryProvider[]) {
+        if (!providers.includes(provider)) providers.push(provider);
+      }
     }
   }
   if (
@@ -340,7 +340,11 @@ export function parseHistoryFlags(
       "VALIDATION_ERROR",
     );
   }
-  return { providers, month, json };
+  return {
+    providers: providers.length > 0 ? providers : [...HISTORY_PROVIDERS],
+    month,
+    json,
+  };
 }
 
 function parseIntelligenceValue(
