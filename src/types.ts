@@ -14,7 +14,9 @@ export type ProviderId =
   | "mimo"
   | "deepseek"
   | "openrouter"
-  | "elevenlabs";
+  | "elevenlabs"
+  | "devin"
+  | "muse";
 
 export const PROVIDER_IDS = [
   "claude",
@@ -33,6 +35,8 @@ export const PROVIDER_IDS = [
   "deepseek",
   "openrouter",
   "elevenlabs",
+  "devin",
+  "muse",
 ] as const satisfies readonly ProviderId[];
 
 export type ProviderSource =
@@ -165,8 +169,9 @@ export type EffectiveSelection = Partial<
 > & {
   status: "known" | "unknown";
   /**
-   * Bounding windows whose pace is unknown or unusable. Any such window makes
-   * the whole scope unmeasurable and suppresses the scalar.
+   * Bounding windows that blocked the scalar. Any named window makes the whole
+   * scope unmeasurable. Omitted when `status` is `unknown` only because every
+   * bound is untriggered (no cycle to weight).
    */
   unmeasurableWindowIds?: string[];
 };
@@ -270,7 +275,11 @@ export type DegradedSource = {
 export type ProviderAccount = {
   /** Opaque local lane identity, stable across refresh and discovery order. */
   accountKey: string;
-  /** Resolves undefined when the lane establishes no distinct account. */
+  /**
+   * Resolves undefined when the lane establishes no distinct account. A
+   * reading that covers credential keys folded into this lane names them in
+   * its `accountKeys`; the collector puts the lane's own key first.
+   */
   fetchQuota(options: ProviderOptions): Promise<ProviderQuota | undefined>;
   inspectAuth(options: ProviderOptions): Promise<AuthProviderReport>;
 };
@@ -279,6 +288,13 @@ export type ProviderQuota = {
   provider: ProviderId;
   /** Present in account-expanded reports; absent for the legacy single lane. */
   accountKey?: string;
+  /**
+   * Every credential key this row covers, own `accountKey` first. Present on
+   * every quota-axi output quota row; optional here so package consumers can
+   * construct ProviderQuota without it. A row covering one credential lists
+   * just its own key, and a provider without account discovery lists `default`.
+   */
+  accountKeys?: string[];
   /** Display name. Omitted from default `--json`; see `--full`. */
   label?: string;
   /** Report provenance. Omitted from default `--json`; see `--full`. */
@@ -320,8 +336,20 @@ export type ProviderQuota = {
     degradedSources?: DegradedSource[];
     /** Omitted from default `--json`; see `--full`. */
     sourcesTried?: string[];
+    /**
+     * Sparse marker: this fresh reading is the last successful one, served
+     * from the cache instead of asking the vendor again, and `refreshedAt`
+     * (kept in default `--json` when this is set) says when it was taken.
+     */
+    reused?: true;
   };
   attempts?: SourceAttempt[];
+  /**
+   * Sparse JSON marker, present only when this lane has positive evidence it
+   * is not set up. Default TOON omits those providers; `--json` keeps the lane.
+   * Applied at serialization from `providerPresence`, never by an adapter.
+   */
+  notSetUp?: true;
 };
 
 export type QuotaAxiResponse = {
@@ -354,6 +382,23 @@ export type ProviderOptions = {
 export type ProviderAdapter = {
   id: ProviderId;
   label: string;
+  /**
+   * Credential sources that can hold a credential without showing the user
+   * has this provider, such as Copilot's GitHub CLI fallback. A skip there,
+   * or a request through it that was definitively refused, is not evidence
+   * of use when the human report folds providers that are not set up; a
+   * request through it that failed transiently still is.
+   */
+  incidentalSources?: readonly string[];
+  /**
+   * Whether a skipped attempt this adapter recorded left presence unknown
+   * rather than showing the source genuinely absent, such as a configuration
+   * naming no confirmable account or an installed tool that failed. The
+   * adapter that owns the source is the only thing that can read its own
+   * skips, so it decides here instead of the human report guessing from
+   * error wording. A provider with such a skip is never folded as not set up.
+   */
+  isUncertainSkip?(attempt: SourceAttempt): boolean;
   discoverAccounts?(): Promise<ProviderAccount[] | undefined>;
   fetchQuota(options: ProviderOptions): Promise<ProviderQuota>;
   inspectAuth(options: ProviderOptions): Promise<AuthProviderReport>;
