@@ -2,7 +2,7 @@ import type { HistorySample } from "./history.js";
 
 /** Reference prices, not an invoice or a historical tariff lookup. USD / 1M tokens. */
 export const HISTORY_RATE_CARD = {
-  asOf: "2026-09-23",
+  asOf: "2026-10-01",
   basis: "standard_global_api_token_rates",
   sources: [
     "https://platform.claude.com/docs/en/about-claude/pricing",
@@ -48,6 +48,7 @@ const CLAUDE_RATES: Readonly<Record<string, Rate>> = {
   "claude-opus-4-6": claude(5, 25),
   "claude-opus-4-5": { ...claude(5, 25), maxInput: 200_000 },
   "claude-opus-4-5-20251101": { ...claude(5, 25), maxInput: 200_000 },
+  "claude-sonnet-5-5": claude(2, 10),
   "claude-sonnet-5": claude(2, 10),
   "claude-sonnet-4-6": claude(3, 15),
   "claude-sonnet-4-5": { ...claude(3, 15), maxInput: 200_000 },

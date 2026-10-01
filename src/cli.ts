@@ -21,7 +21,7 @@ notes:
   Every quota read, including each --tui refresh, may delegate an expired session's renewal to the vendor CLI that owns it. --no-credential-refresh disables delegated credential refresh; auth is always read-only.
   --profile-only requires explicit CLAUDE_CONFIG_DIR or CODEX_HOME plus exactly one matching provider. It reads only that credential file: no Keychain, Pi, CLI RPC, fallback, refresh, or cache. With --full --json, non-secret account identity, source, and attempts remain visible; tokens and file contents remain excluded, and ordinary output remains redacted.
 history:
-  history [--month YYYY-MM] [--provider claude,codex] [--json] reads local Claude Code, Codex CLI, and Pi session usage only (UTC). Reports daily tokens and standard API-rate-equivalent monthly velocity against Claude $3500 / Codex $600 budgets. Not an invoice or complete account history; unverified prices stay unknown. No provider calls, credential reads, cache writes, or inference.
+  history [--month YYYY-MM] [--provider claude,codex] [--json] reads local Claude Code, Codex CLI, and Pi session usage only (UTC). Reports daily tokens and standard API-rate-equivalent monthly velocity against Claude $3900 / Codex $600 monthly budgets (override with QUOTA_AXI_CLAUDE_BUDGET_USD / QUOTA_AXI_CODEX_BUDGET_USD). Not an invoice or complete account history; unverified prices stay unknown. No provider calls, credential reads, cache writes, or inference.
 flags[15]:
   --month <YYYY-MM>, --provider <${PROVIDER_IDS.join(",")}>, --json, --full, --tui, --refresh <30s-24h>, --once, --allow-keychain-prompt, --allow-claude-inference, --no-credential-refresh, --profile-only, --intelligence <high|medium|low>, --sort <runway>, --help, -v/--version
 examples:

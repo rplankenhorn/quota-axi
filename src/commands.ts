@@ -6,7 +6,7 @@ import {
   parseModelsFlags,
   type QuotaFlags,
 } from "./args.js";
-import { createHistoryReport } from "./history.js";
+import { createHistoryReport, resolveMonthlyBudgets } from "./history.js";
 import { readHistory } from "./history-reader.js";
 import { writeCachedProviders } from "./cache.js";
 import { withQuotaSemantics } from "./interpretation.js";
@@ -190,12 +190,14 @@ export async function modelsCommand(
 export async function historyCommand(args: string[]): Promise<string> {
   const generatedAt = nowIso();
   const flags = parseHistoryFlags(args, generatedAt);
+  const budgets = resolveMonthlyBudgets();
   const read = await readHistory(flags.month, generatedAt, flags.providers);
   const response = createHistoryReport(
     read,
     flags.month,
     generatedAt,
     flags.providers,
+    budgets,
   );
   if (response.forecast.every((forecast) => forecast.records === 0))
     process.exitCode = 1;

@@ -1,10 +1,41 @@
+import { AxiError } from "axi-sdk-js";
 import { HISTORY_RATE_CARD, priceHistorySample } from "./history-rates.js";
 import { PACE_EARLY_ELAPSED_PERCENT } from "./pace.js";
 
 export const HISTORY_PROVIDERS = ["claude", "codex"] as const;
 export type HistoryProvider = (typeof HISTORY_PROVIDERS)[number];
 export type HistorySource = "claude-code" | "codex-cli" | "pi";
-export const MONTHLY_BUDGET_USD = { claude: 3500, codex: 600 } as const;
+export const DEFAULT_MONTHLY_BUDGET_USD: Readonly<
+  Record<HistoryProvider, number>
+> = { claude: 3900, codex: 600 };
+const BUDGET_ENV: Readonly<Record<HistoryProvider, string>> = {
+  claude: "QUOTA_AXI_CLAUDE_BUDGET_USD",
+  codex: "QUOTA_AXI_CODEX_BUDGET_USD",
+};
+
+/** Defaults overridden by QUOTA_AXI_{CLAUDE,CODEX}_BUDGET_USD; invalid values fail loudly. */
+export function resolveMonthlyBudgets(
+  env: NodeJS.ProcessEnv = process.env,
+): Record<HistoryProvider, number> {
+  const budgets = { ...DEFAULT_MONTHLY_BUDGET_USD };
+  for (const provider of HISTORY_PROVIDERS) {
+    const name = BUDGET_ENV[provider];
+    const raw = env[name]?.trim();
+    if (!raw) continue;
+    const value = /^(?:\d+\.?\d*|\.\d+)$/.test(raw) ? Number(raw) : NaN;
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new AxiError(
+        `${name} must be a positive number of USD, got "${raw}"`,
+        "VALIDATION_ERROR",
+        [
+          `Set ${name} to a positive number such as ${DEFAULT_MONTHLY_BUDGET_USD[provider]}, or unset it`,
+        ],
+      );
+    }
+    budgets[provider] = value;
+  }
+  return budgets;
+}
 
 /** Native token counts. Reasoning is a subset of output, 1h writes a subset of writes. */
 export type HistoryTokens = {
@@ -110,6 +141,9 @@ export function createHistoryReport(
   month: string,
   generatedAt: string,
   providers: readonly HistoryProvider[] = HISTORY_PROVIDERS,
+  budgets: Readonly<
+    Record<HistoryProvider, number>
+  > = DEFAULT_MONTHLY_BUDGET_USD,
 ): HistoryReport {
   const { start, end } = historyMonthBounds(month);
   const cutoff = Math.min(Date.parse(generatedAt), end);
@@ -189,7 +223,7 @@ export function createHistoryReport(
       (sum, day) => sum + day.unpricedRecords,
       0,
     );
-    const budgetUsd = MONTHLY_BUDGET_USD[provider];
+    const budgetUsd = budgets[provider];
     const reason = issues.some(
       (issue) => !issue.provider || issue.provider === provider,
     )
