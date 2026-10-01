@@ -5,6 +5,7 @@ import {
   type HistoryRead,
   type HistorySample,
 } from "../src/history.js";
+import { resolveMonthlyBudgets } from "../src/history.js";
 import { priceHistorySample } from "../src/history-rates.js";
 
 function sample(
@@ -185,7 +186,7 @@ describe("verified API token-rate equivalents", () => {
 });
 
 describe("monthly budget velocity", () => {
-  it("keeps the $3500 Claude and $600 Codex budgets independent, with declaration order", () => {
+  it("keeps the $3900 Claude and $600 Codex budgets independent, with declaration order", () => {
     const result = report([
       outputCost("codex", 25_000_000),
       outputCost("claude", 70_000_000),
@@ -193,13 +194,13 @@ describe("monthly budget velocity", () => {
     expect(result.forecast).toMatchObject([
       {
         provider: "claude",
-        budgetUsd: 3500,
+        budgetUsd: 3900,
         apiEquivalentUsd: 1750,
         elapsedDays: 15,
         monthDays: 30,
         projectedMonthUsd: 3500,
         status: "within_budget_at_observed_pace",
-        remainingBudgetUsd: 1750,
+        remainingBudgetUsd: 2150,
       },
       {
         provider: "codex",
@@ -367,5 +368,66 @@ describe("monthly budget velocity", () => {
     ]);
     expect(result.daily).toHaveLength(1);
     expect(result.daily[0]).toMatchObject({ date: "2026-09-10", records: 1 });
+  });
+});
+
+describe("configurable monthly budgets", () => {
+  it("defaults to Claude 3900 / Codex 600 and honors env overrides", () => {
+    expect(resolveMonthlyBudgets({})).toEqual({ claude: 3900, codex: 600 });
+    expect(
+      resolveMonthlyBudgets({
+        QUOTA_AXI_CLAUDE_BUDGET_USD: "4200.5",
+        QUOTA_AXI_CODEX_BUDGET_USD: " 750 ",
+      }),
+    ).toEqual({ claude: 4200.5, codex: 750 });
+    expect(resolveMonthlyBudgets({ QUOTA_AXI_CODEX_BUDGET_USD: "" })).toEqual({
+      claude: 3900,
+      codex: 600,
+    });
+  });
+
+  it.each(["0", "-5", "abc", "1e3", "NaN", "Infinity", "12usd"])(
+    "rejects invalid budget %s with a clear error",
+    (value) => {
+      expect(() =>
+        resolveMonthlyBudgets({ QUOTA_AXI_CLAUDE_BUDGET_USD: value }),
+      ).toThrow(/QUOTA_AXI_CLAUDE_BUDGET_USD must be a positive number/);
+      expect(() =>
+        resolveMonthlyBudgets({ QUOTA_AXI_CODEX_BUDGET_USD: value }),
+      ).toThrow(/QUOTA_AXI_CODEX_BUDGET_USD must be a positive number/);
+    },
+  );
+
+  it("applies resolved budgets to the forecast", () => {
+    const result = createHistoryReport(
+      read([outputCost("claude", 70_000_000)]),
+      "2026-09",
+      "2026-09-16T00:00:00.000Z",
+      ["claude"],
+      { claude: 1000, codex: 600 },
+    );
+    expect(result.forecast[0]).toMatchObject({
+      budgetUsd: 1000,
+      status: "over_budget",
+    });
+  });
+});
+
+describe("claude-sonnet-5-5 pricing", () => {
+  it("uses the verified 2/10 USD per MTok card with 0.2 cache read, 2.5 5m and 4 1h writes", () => {
+    const price = priceHistorySample(
+      sample("claude", {
+        model: "claude-sonnet-5-5",
+        tokens: {
+          inputTokens: 1_000_000,
+          outputTokens: 1_000_000,
+          cacheReadTokens: 1_000_000,
+          cacheWriteTokens: 2_000_000,
+          cacheWrite1hTokens: 1_000_000,
+        },
+      }),
+    );
+    // 2 + 10 + 0.2 + 2.5 (5m) + 4 (1h)
+    expect(price).toEqual({ usd: 18.7 });
   });
 });

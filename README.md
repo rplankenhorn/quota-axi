@@ -350,7 +350,7 @@ quota-axi history --provider codex --json         # structured evidence and fore
 
 `history` accepts only `--month YYYY-MM`, `--provider claude,codex`, `--json`, and help/version flags. Future months are rejected. Existing quota, auth, models, and TUI output contracts are unchanged; history has its own JSON `schemaVersion: 1` and default TOON `daily[]`, `forecast[]`, `sources[]`, and `issues[]` blocks.
 
-**Standing monthly budgets are $3,500 for Claude and $600 for Codex, measured at API token rates.** Each provider has its own forecast; neither quota percentages nor token counts are converted into the other provider's units. This is a local usage report, **not an invoice, subscription charge, or complete account-wide billing history**. All local accounts represented in the selected session directories contribute to that provider's budget; history does not inspect credentials to identify accounts.
+**Standing monthly budgets default to $3,900 for Claude and $600 for Codex, measured at API token rates.** Override them with the positive-number environment variables `QUOTA_AXI_CLAUDE_BUDGET_USD` and `QUOTA_AXI_CODEX_BUDGET_USD`; an invalid value is a validation error. Each provider has its own forecast; neither quota percentages nor token counts are converted into the other provider's units. This is a local usage report, **not an invoice, subscription charge, or complete account-wide billing history**. All local accounts represented in the selected session directories contribute to that provider's budget; history does not inspect credentials to identify accounts.
 
 #### Local history sources
 
